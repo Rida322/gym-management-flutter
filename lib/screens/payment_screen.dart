@@ -44,16 +44,27 @@ class _PaymentScreenState extends State<PaymentScreen>
   // ================= FETCH =================
   Future<void> fetchPayments() async {
     final res = await http.get(Uri.parse('$baseUrl/api/admin/payments'));
-    setState(() => payments = jsonDecode(res.body));
+
+    if (res.statusCode == 200) {
+      setState(() {
+        payments = List.from(jsonDecode(res.body)); // 🔥 FIX
+      });
+    }
   }
+
 
   Future<void> fetchExpenses() async {
     final res = await http.get(
-      Uri.parse(
-          '$baseUrl/api/admin/payments/expenses/filter?month=$month&year=$year'),
+      Uri.parse('$baseUrl/api/admin/payments/expenses/filter?month=$month&year=$year'),
     );
-    setState(() => expenses = jsonDecode(res.body));
+
+    if (res.statusCode == 200) {
+      setState(() {
+        expenses = List.from(jsonDecode(res.body)); // 🔥 FIX
+      });
+    }
   }
+
 
   // ================= UI =================
   @override
@@ -111,7 +122,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                 return DataRow(cells: [
                   DataCell(Text(p['name'] ?? '-')),
                   DataCell(Text(p['email'] ?? '-')),
-                  DataCell(Text(p['phone'] ?? '-')),
+                  DataCell(Text(p['phoneNumber'] ?? '-')), // 🔥 FIX
                   DataCell(Text("\$${p['amount']}")),
                   DataCell(Text(p['startDate'] ?? '-')),
                   DataCell(Text(p['endDate'] ?? '-')),
@@ -180,8 +191,8 @@ class _PaymentScreenState extends State<PaymentScreen>
               rows: expenses.map<DataRow>((e) {
                 return DataRow(cells: [
                   DataCell(Text(e['entity'])),
-                  DataCell(Text("\$${e['cost']}")),
-                  DataCell(Text(e['date'] ?? '-')),
+                  DataCell(Text("\$${(e['cost'] ?? 0).toString()}")), // 🔥 FIX
+                  DataCell(Text(e['expenseDate'] ?? '-')),
                   DataCell(
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
@@ -208,9 +219,11 @@ class _PaymentScreenState extends State<PaymentScreen>
     final phoneCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    final priceCtrl = TextEditingController(text: "3");
+    int selectedDays = 1;
+    double selectedPrice = 3;
 
     String plan = "1 Day (\$3)";
+
     String method = "Cash";
 
     showDialog(
@@ -267,11 +280,31 @@ class _PaymentScreenState extends State<PaymentScreen>
                   "Subscription Plan",
                   plan,
                   ["1 Day (\$3)", "1 Month (\$25)", "2 Months (\$45)", "3 Months (\$65)"],
-                      (v) => plan = v,
+                      (v) {
+                    setState(() {
+                      plan = v;
+
+                      if (v.startsWith("1 Day")) {
+                        selectedDays = 1;
+                        selectedPrice = 3;
+                      } else if (v.startsWith("1 Month")) {
+                        selectedDays = 30;
+                        selectedPrice = 25;
+                      } else if (v.startsWith("2 Months")) {
+                        selectedDays = 60;
+                        selectedPrice = 45;
+                      } else if (v.startsWith("3 Months")) {
+                        selectedDays = 90;
+                        selectedPrice = 65;
+                      }
+                    });
+                  },
                 ),
 
+
                 const SizedBox(height: 8),
-                Text("Price: \$${priceCtrl.text}",
+                Text("Price: \$${selectedPrice.toStringAsFixed(0)}",
+
                     style: const TextStyle(color: Colors.white70)),
 
                 const SizedBox(height: 10),
@@ -297,7 +330,8 @@ class _PaymentScreenState extends State<PaymentScreen>
                         await recordPayment(
                           email: emailCtrl.text,
                           phone: phoneCtrl.text,
-                          amount: double.parse(priceCtrl.text),
+                          amount: selectedPrice,
+
                         );
 
                         Navigator.pop(context);
@@ -380,7 +414,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                         );
 
                         Navigator.pop(context);
-                        fetchExpenses();
+                       await fetchExpenses();
                       },
                       child: const Text("Add Expense"),
                     ),
@@ -534,7 +568,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
 
     if (res.statusCode == 200 || res.statusCode == 201) {
-      fetchPayments(); // 🔥 refresh table
+     await fetchPayments(); // 🔥 refresh table
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Payment failed: ${res.body}")),
